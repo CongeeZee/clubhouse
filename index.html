@@ -994,9 +994,10 @@ function switchTab(name,btn){
 }
 
 // ── Backend detection (runs once at startup)
-let USE_SERVER = false;
+let USE_SERVER = false, HAS_FILE_SERVER = false;
 async function detectBackend(){
   try{ const r=await fetch('/api/todos',{method:'GET'}); USE_SERVER=r.ok; }catch{ USE_SERVER=false; }
+  try{ const r=await fetch('/api/files',{method:'GET'}); HAS_FILE_SERVER=r.ok; }catch{ HAS_FILE_SERVER=false; }
 }
 
 // ── Local storage helpers (used when no server is available)
@@ -1420,15 +1421,58 @@ async function saveNote(){
   if(n&&n.id) selectNote(n.id);
 }
 
-// ── Vault (File System Access API)
-let vaultHandle=null;
-let _vaultEntries=[], _vaultPathHandles=[];
+// ── Vault — server API (when running locally) + FSA fallback (Vercel)
+let fileRoots=[], _vaultEntries=[], _vaultPathHandles=[], vaultHandle=null;
 
-async function openVault(){
-  if(!window.showDirectoryPicker){
-    alert('File System Access API not supported. Use Chrome or Edge.');
-    return;
+async function loadFiles(){
+  if(HAS_FILE_SERVER){
+    const cfg=await fetch('/api/files').then(r=>r.json());
+    fileRoots=cfg.roots||[];
+    if(!fileRoots.length) return;
+    const el=document.getElementById('files-body');
+    el.innerHTML=fileRoots.map(r=>`<div class="f-entry dir" onclick="browseDir('${escA(r.path)}')">📁 ${esc(r.name||r.path.split('/').pop())}</div>`).join('');
   }
+}
+
+async function browseDir(p){
+  if(!HAS_FILE_SERVER) return;
+  const data=await fetch(`/api/files/browse?path=${encodeURIComponent(p)}`).then(r=>r.json());
+  const el=document.getElementById('files-body');
+  const parts=p.split('/').filter(Boolean);
+  const crumbs=parts.map((pt,i)=>`<span onclick="browseDir('${escA('/'+parts.slice(0,i+1).join('/'))}')">${esc(pt)}</span>`).join(' / ');
+  const parent=p.split('/').slice(0,-1).join('/')||'/';
+  const parentOk=fileRoots.some(r=>parent===r.path||parent.startsWith(r.path+'/'));
+  let html=`<div class="breadcrumb">/ ${crumbs}</div>`;
+  if(parentOk) html+=`<div class="f-entry dir" onclick="browseDir('${escA(parent)}')">⬆ ..</div>`;
+  (data.entries||[]).sort((a,b)=>(b.isDir-a.isDir)||a.name.localeCompare(b.name)).forEach(e=>{
+    html+=e.isDir
+      ?`<div class="f-entry dir" onclick="browseDir('${escA(e.path)}')">📁 ${esc(e.name)}</div>`
+      :`<div class="f-entry" onclick="viewServerFile('${escA(e.path)}')">📄 ${esc(e.name)}</div>`;
+  });
+  el.innerHTML=html;
+}
+
+async function viewServerFile(p){
+  const data=await fetch(`/api/files/read?path=${encodeURIComponent(p)}`).then(r=>r.json());
+  const fname=p.split('/').pop();
+  clearViewer();
+  document.getElementById('viewer-title').textContent='📄 '+fname;
+  document.getElementById('viewer-title').style.display='block';
+  document.getElementById('viewer-meta').textContent=p;
+  const bodyEl=document.getElementById('viewer-body');
+  bodyEl.style.display='block';
+  if(/\.(md|markdown)$/i.test(fname)){
+    bodyEl.innerHTML=marked.parse(data.content||'');
+  } else {
+    bodyEl.innerHTML='<pre style="white-space:pre-wrap;font-family:\'Space Mono\',monospace;font-size:12px;overflow-x:auto">'+esc(data.content||'')+'</pre>';
+  }
+  switchTab('intel',document.querySelector('[data-page=intel]'));
+}
+
+// ── FSA fallback (Vercel / no local server)
+async function openVault(){
+  if(HAS_FILE_SERVER){ browseDir(fileRoots[0]?.path||''); return; }
+  if(!window.showDirectoryPicker){ alert('Run server.js locally, or use Chrome/Edge for the file picker.'); return; }
   try{
     vaultHandle=await window.showDirectoryPicker({mode:'read'});
     await renderVaultDir(vaultHandle,[]);
@@ -1436,14 +1480,10 @@ async function openVault(){
 }
 
 async function renderVaultDir(dirHandle,pathHandles){
-  _vaultPathHandles=pathHandles;
-  _vaultEntries=[];
-  for await(const [name,handle] of dirHandle.entries()){
-    if(!name.startsWith('.')) // hide dotfiles
-      _vaultEntries.push({name,handle,isDir:handle.kind==='directory'});
-  }
+  _vaultPathHandles=pathHandles; _vaultEntries=[];
+  for await(const [name,handle] of dirHandle.entries())
+    if(!name.startsWith('.')) _vaultEntries.push({name,handle,isDir:handle.kind==='directory'});
   _vaultEntries.sort((a,b)=>(b.isDir-a.isDir)||a.name.localeCompare(b.name));
-
   const el=document.getElementById('files-body');
   let html='';
   if(pathHandles.length>0){
@@ -1460,38 +1500,18 @@ async function renderVaultDir(dirHandle,pathHandles){
 }
 
 async function vaultGoRoot(){ await renderVaultDir(vaultHandle,[]); }
-
-async function vaultGoTo(i){
-  if(i<0){ await vaultGoRoot(); return; }
-  const ph=_vaultPathHandles[i];
-  await renderVaultDir(ph.handle,_vaultPathHandles.slice(0,i+1));
-}
-
-async function vaultEnter(i){
-  const e=_vaultEntries[i];
-  await renderVaultDir(e.handle,[..._vaultPathHandles,{name:e.name,handle:e.handle}]);
-}
-
+async function vaultGoTo(i){ if(i<0){await vaultGoRoot();return;} const ph=_vaultPathHandles[i]; await renderVaultDir(ph.handle,_vaultPathHandles.slice(0,i+1)); }
+async function vaultEnter(i){ const e=_vaultEntries[i]; await renderVaultDir(e.handle,[..._vaultPathHandles,{name:e.name,handle:e.handle}]); }
 async function vaultOpen(i){
-  const e=_vaultEntries[i];
-  const file=await e.handle.getFile();
-  const content=await file.text();
+  const e=_vaultEntries[i]; const file=await e.handle.getFile(); const content=await file.text();
   clearViewer();
   document.getElementById('viewer-title').textContent='📄 '+e.name;
   document.getElementById('viewer-title').style.display='block';
-  const pathStr=_vaultPathHandles.map(ph=>ph.name).join('/')+'/'+e.name;
-  document.getElementById('viewer-meta').textContent=pathStr;
-  const bodyEl=document.getElementById('viewer-body');
-  bodyEl.style.display='block';
-  if(/\.(md|markdown)$/i.test(e.name)){
-    bodyEl.innerHTML=marked.parse(content);
-  } else {
-    bodyEl.innerHTML='<pre style="white-space:pre-wrap;font-family:\'Space Mono\',monospace;font-size:12px;overflow-x:auto">'+esc(content)+'</pre>';
-  }
+  document.getElementById('viewer-meta').textContent=_vaultPathHandles.map(ph=>ph.name).join('/')+'/'+e.name;
+  const bodyEl=document.getElementById('viewer-body'); bodyEl.style.display='block';
+  bodyEl.innerHTML=/\.(md|markdown)$/i.test(e.name)?marked.parse(content):'<pre style="white-space:pre-wrap;font-family:\'Space Mono\',monospace;font-size:12px">'+esc(content)+'</pre>';
   switchTab('intel',document.querySelector('[data-page=intel]'));
 }
-
-async function loadFiles(){ /* vault is managed by openVault() */ }
 
 // ── Modals
 function openM(id){document.getElementById(id).classList.add('open');}
