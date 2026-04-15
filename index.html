@@ -812,10 +812,10 @@ input, select, textarea { font-family: inherit; }
       </div>
       <div class="panel files-pane">
         <div class="panel-header">
-          <div class="panel-label"><div class="panel-dot" style="background:var(--gold)"></div>FILES</div>
-          <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px" onclick="openM('file-hint-modal')">+ ROOT</button>
+          <div class="panel-label"><div class="panel-dot" style="background:var(--gold)"></div>VAULT</div>
+          <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px" onclick="openVault()">OPEN VAULT</button>
         </div>
-        <div id="files-body"><div class="empty-msg">No folders shared yet.<br>Ask Claude to add a path.</div></div>
+        <div id="files-body"><div class="empty-msg">Click OPEN VAULT to browse local files.</div></div>
       </div>
     </div>
 
@@ -828,15 +828,8 @@ input, select, textarea { font-family: inherit; }
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-left:12px;flex-shrink:0">
           <span id="viewer-meta" style="font-size:11px;color:var(--text-dim)"></span>
-          <!-- view mode buttons -->
-          <button class="btn btn-ghost" id="viewer-edit-btn" onclick="enterEditMode()"
-            style="display:none;font-size:10px;padding:4px 10px">EDIT</button>
+          <span id="autosave-status" style="font-size:10px;letter-spacing:1px;font-family:'Space Mono',monospace;color:var(--text-dim);display:none"></span>
           <button class="del-btn" id="viewer-del" onclick="deleteNote()" style="display:none;opacity:0.5">✕</button>
-          <!-- edit mode buttons -->
-          <button class="btn" id="viewer-save-btn" onclick="saveNoteEdit()"
-            style="display:none;font-size:10px;padding:4px 12px">SAVE</button>
-          <button class="btn btn-ghost" id="viewer-cancel-btn" onclick="cancelEditMode()"
-            style="display:none;font-size:10px;padding:4px 10px">CANCEL</button>
         </div>
       </div>
       <div id="viewer-body-wrap" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0">
@@ -940,13 +933,6 @@ input, select, textarea { font-family: inherit; }
   </div>
 </div>
 
-<div class="overlay" id="file-hint-modal">
-  <div class="modal">
-    <div class="modal-title">Add File Root</div>
-    <p style="font-size:12px;color:var(--text-dim);line-height:1.75">Tell Claude via chat:<br><span style="color:var(--gold-dim);font-family:'Space Mono',monospace">"Add /home/fool/Documents to my file browser"</span></p>
-    <div class="modal-actions"><button class="btn" onclick="closeM('file-hint-modal')">Got it</button></div>
-  </div>
-</div>
 
 <!-- ══ JS ════════════════════════════════════════════════════════ -->
 <script>
@@ -1300,65 +1286,93 @@ function renderNotesList(){
     </div>`).join('');
 }
 
-function selectNote(id){
-  activeNoteId=id;
-  const n=notes.find(x=>x.id===id);
-  if(!n)return;
-  cancelEditMode();
-  document.getElementById('viewer-title').textContent=n.title;
-  document.getElementById('viewer-meta').textContent=fmtDate(n.createdAt);
-  document.getElementById('viewer-body').innerHTML=marked.parse(n.content||'');
-  document.getElementById('viewer-del').style.display='block';
-  document.getElementById('viewer-edit-btn').style.display='block';
-  renderNotesList();
+// ── Autosave
+let autosaveTimer=null, suppressSave=false;
+
+function scheduleAutosave(){
+  if(suppressSave||!activeNoteId) return;
+  clearTimeout(autosaveTimer);
+  const st=document.getElementById('autosave-status');
+  if(st){st.style.display='block';st.textContent='SAVING...';}
+  autosaveTimer=setTimeout(doAutosave,1500);
 }
 
-function enterEditMode(){
+async function doAutosave(){
+  if(!activeNoteId) return;
+  const title=document.getElementById('viewer-title-edit').value.trim();
+  const content=(cmEditor?cmEditor.getValue():'').trim();
+  if(!title) return;
+  await api('PUT',`/api/notes/${activeNoteId}`,{title,content});
   const n=notes.find(x=>x.id===activeNoteId);
-  if(!n)return;
-  // swap title
+  if(n){n.title=title;n.content=content;}
+  renderNotesList();
+  const st=document.getElementById('autosave-status');
+  if(st){st.textContent='SAVED';setTimeout(()=>{st.style.display='none';},2000);}
+}
+
+function clearViewer(){
+  clearTimeout(autosaveTimer);
+  activeNoteId=null;
+  document.getElementById('viewer-title').style.display='block';
+  document.getElementById('viewer-title').textContent='— SELECT A NOTE —';
+  document.getElementById('viewer-title-edit').style.display='none';
+  document.getElementById('viewer-title-edit').oninput=null;
+  document.getElementById('viewer-body').style.display='block';
+  document.getElementById('viewer-body').innerHTML='<span style="color:var(--text-dim)">Select a note, or create a new one.</span>';
+  document.getElementById('editor-wrap').style.display='none';
+  document.getElementById('viewer-del').style.display='none';
+  document.getElementById('viewer-meta').textContent='';
+  const st=document.getElementById('autosave-status');
+  if(st) st.style.display='none';
+  cmEditor=null;
+}
+
+async function selectNote(id){
+  // flush any pending save on the previous note
+  if(activeNoteId && activeNoteId!==id){
+    clearTimeout(autosaveTimer);
+    await doAutosave();
+  }
+  activeNoteId=id;
+  const n=notes.find(x=>x.id===id);
+  if(!n) return;
+
+  // title input (always editable)
   document.getElementById('viewer-title').style.display='none';
   const titleIn=document.getElementById('viewer-title-edit');
   titleIn.value=n.title;
   titleIn.style.display='block';
-  // swap body: hide read view, show editor
-  document.getElementById('viewer-body').style.display='none';
-  const edWrap=document.getElementById('editor-wrap');
-  edWrap.style.display='flex';
-  // init CodeMirror
-  const container=document.getElementById('cm-container');
-  container.innerHTML='';
-  cmEditor=CodeMirror(container,{
-    value:n.content||'',
-    mode:'markdown',
-    lineNumbers:true,
-    lineWrapping:true,
-    keyMap:vimMode?'vim':'default',
-    autofocus:false,
-  });
-  cmEditor.setSize('100%','100%');
-  setTimeout(()=>cmEditor.refresh(),80);
-  setEditorTab('write');
-  // swap buttons
-  document.getElementById('viewer-edit-btn').style.display='none';
-  document.getElementById('viewer-del').style.display='none';
-  document.getElementById('viewer-save-btn').style.display='block';
-  document.getElementById('viewer-cancel-btn').style.display='block';
-  titleIn.focus();
-}
+  titleIn.oninput=scheduleAutosave;
 
-function cancelEditMode(){
-  document.getElementById('viewer-title').style.display='block';
-  document.getElementById('viewer-title-edit').style.display='none';
-  document.getElementById('viewer-body').style.display='block';
-  document.getElementById('editor-wrap').style.display='none';
-  document.getElementById('viewer-save-btn').style.display='none';
-  document.getElementById('viewer-cancel-btn').style.display='none';
-  cmEditor=null;
-  if(activeNoteId){
-    document.getElementById('viewer-edit-btn').style.display='block';
-    document.getElementById('viewer-del').style.display='block';
+  document.getElementById('viewer-meta').textContent=fmtDate(n.createdAt);
+  document.getElementById('viewer-del').style.display='block';
+
+  // show editor, hide read-only body
+  document.getElementById('viewer-body').style.display='none';
+  document.getElementById('editor-wrap').style.display='flex';
+
+  // init or update CodeMirror
+  suppressSave=true;
+  if(!cmEditor){
+    const container=document.getElementById('cm-container');
+    container.innerHTML='';
+    cmEditor=CodeMirror(container,{
+      value:n.content||'',
+      mode:'markdown',
+      lineNumbers:true,
+      lineWrapping:true,
+      keyMap:vimMode?'vim':'default',
+    });
+    cmEditor.setSize('100%','100%');
+    cmEditor.on('change',scheduleAutosave);
+  } else {
+    cmEditor.setValue(n.content||'');
   }
+  suppressSave=false;
+
+  setTimeout(()=>cmEditor&&cmEditor.refresh(),80);
+  setEditorTab('write');
+  renderNotesList();
 }
 
 function setEditorTab(tab){
@@ -1385,26 +1399,12 @@ function toggleVim(){
   if(cmEditor) cmEditor.setOption('keyMap',vimMode?'vim':'default');
 }
 
-async function saveNoteEdit(){
-  if(!activeNoteId)return;
-  const title=document.getElementById('viewer-title-edit').value.trim();
-  const content=(cmEditor?cmEditor.getValue():'').trim();
-  if(!title||!content)return;
-  await api('PUT',`/api/notes/${activeNoteId}`,{title,content});
-  await loadNotes();
-  selectNote(activeNoteId);
-}
-
 async function deleteNote(){
   if(!activeNoteId||!confirm('Delete this note?'))return;
-  await api('DELETE',`/api/notes/${activeNoteId}`);
-  activeNoteId=null;
-  cancelEditMode();
-  document.getElementById('viewer-title').textContent='— SELECT A NOTE —';
-  document.getElementById('viewer-body').innerHTML='<span style="color:var(--text-dim)">Select a note.</span>';
-  document.getElementById('viewer-meta').textContent='';
-  document.getElementById('viewer-del').style.display='none';
-  document.getElementById('viewer-edit-btn').style.display='none';
+  const id=activeNoteId;
+  clearTimeout(autosaveTimer);
+  await api('DELETE',`/api/notes/${id}`);
+  clearViewer();
   loadNotes();
 }
 
@@ -1412,56 +1412,86 @@ async function saveNote(){
   const title=document.getElementById('nm-title').value.trim();
   const tag=document.getElementById('nm-tag').value.trim();
   const content=document.getElementById('nm-body').value.trim();
-  if(!title||!content)return;
-  await api('POST','/api/notes',{title,tag,content});
+  if(!title) return;
+  const n=await api('POST','/api/notes',{title,tag,content:content||''});
   closeM('note-modal');
   ['nm-title','nm-tag','nm-body'].forEach(id=>document.getElementById(id).value='');
-  loadNotes();
+  await loadNotes();
+  if(n&&n.id) selectNote(n.id);
 }
 
-// ── Files
-async function loadFiles(){
-  const cfg=await api('GET','/api/files');
-  fileRoots=cfg.roots||[];
-  const el=document.getElementById('files-body');
-  if(!fileRoots.length){el.innerHTML='<div class="empty-msg">No folders shared yet.</div>';return;}
-  el.innerHTML=fileRoots.map(r=>`<div class="f-entry dir" onclick="browseDir('${escA(r.path)}')">📁 ${esc(r.name||r.path.split('/').pop())}</div>`).join('');
-}
+// ── Vault (File System Access API)
+let vaultHandle=null;
+let _vaultEntries=[], _vaultPathHandles=[];
 
-async function browseDir(p){
-  const data=await api('GET',`/api/files/browse?path=${encodeURIComponent(p)}`);
-  const el=document.getElementById('files-body');
-  const parts=data.path.split('/').filter(Boolean);
-  const crumbs=parts.map((pt,i)=>`<span onclick="browseDir('${escA('/'+parts.slice(0,i+1).join('/'))}')">${esc(pt)}</span>`).join(' / ');
-  const parent=data.path.split('/').slice(0,-1).join('/')||'/';
-  const parentOk=fileRoots.some(r=>parent.startsWith(r.path));
-  let html=`<div class="breadcrumb">/ ${crumbs}</div>`;
-  if(parentOk)html+=`<div class="f-entry dir" onclick="browseDir('${escA(parent)}')">⬆ ..</div>`;
-  data.entries.sort((a,b)=>(b.isDir-a.isDir)||a.name.localeCompare(b.name)).forEach(e=>{
-    html+=e.isDir
-      ?`<div class="f-entry dir" onclick="browseDir('${escA(e.path)}')">📁 ${esc(e.name)}</div>`
-      :`<div class="f-entry" onclick="viewFile('${escA(e.path)}')">📄 ${esc(e.name)}</div>`;
-  });
-  el.innerHTML=html;
-}
-
-async function viewFile(p){
-  const data=await api('GET',`/api/files/read?path=${encodeURIComponent(p)}`);
-  const fname=p.split('/').pop();
-  const bodyEl=document.getElementById('viewer-body');
-  cancelEditMode();
-  document.getElementById('viewer-title').textContent='📄 '+fname;
-  document.getElementById('viewer-meta').textContent=p;
-  if(/\.(md|markdown)$/i.test(fname)){
-    bodyEl.innerHTML=marked.parse(data.content||'');
-  } else {
-    bodyEl.innerHTML='<pre style="white-space:pre-wrap;font-family:\'Space Mono\',monospace;font-size:12px">'+esc(data.content||'')+'</pre>';
+async function openVault(){
+  if(!window.showDirectoryPicker){
+    alert('File System Access API not supported. Use Chrome or Edge.');
+    return;
   }
-  document.getElementById('viewer-del').style.display='none';
-  document.getElementById('viewer-edit-btn').style.display='none';
-  activeNoteId=null;
+  try{
+    vaultHandle=await window.showDirectoryPicker({mode:'read'});
+    await renderVaultDir(vaultHandle,[]);
+  }catch(e){ if(e.name!=='AbortError') console.error(e); }
+}
+
+async function renderVaultDir(dirHandle,pathHandles){
+  _vaultPathHandles=pathHandles;
+  _vaultEntries=[];
+  for await(const [name,handle] of dirHandle.entries()){
+    if(!name.startsWith('.')) // hide dotfiles
+      _vaultEntries.push({name,handle,isDir:handle.kind==='directory'});
+  }
+  _vaultEntries.sort((a,b)=>(b.isDir-a.isDir)||a.name.localeCompare(b.name));
+
+  const el=document.getElementById('files-body');
+  let html='';
+  if(pathHandles.length>0){
+    const crumbs=pathHandles.map((ph,i)=>`<span onclick="vaultGoTo(${i})">${esc(ph.name)}</span>`).join(' / ');
+    html+=`<div class="breadcrumb"><span onclick="vaultGoRoot()">vault</span> / ${crumbs}</div>`;
+    html+=`<div class="f-entry dir" onclick="vaultGoTo(${pathHandles.length-2})">⬆ ..</div>`;
+  }
+  _vaultEntries.forEach((e,i)=>{
+    html+=e.isDir
+      ?`<div class="f-entry dir" onclick="vaultEnter(${i})">📁 ${esc(e.name)}</div>`
+      :`<div class="f-entry" onclick="vaultOpen(${i})">📄 ${esc(e.name)}</div>`;
+  });
+  el.innerHTML=html||'<div class="empty-msg">Empty folder.</div>';
+}
+
+async function vaultGoRoot(){ await renderVaultDir(vaultHandle,[]); }
+
+async function vaultGoTo(i){
+  if(i<0){ await vaultGoRoot(); return; }
+  const ph=_vaultPathHandles[i];
+  await renderVaultDir(ph.handle,_vaultPathHandles.slice(0,i+1));
+}
+
+async function vaultEnter(i){
+  const e=_vaultEntries[i];
+  await renderVaultDir(e.handle,[..._vaultPathHandles,{name:e.name,handle:e.handle}]);
+}
+
+async function vaultOpen(i){
+  const e=_vaultEntries[i];
+  const file=await e.handle.getFile();
+  const content=await file.text();
+  clearViewer();
+  document.getElementById('viewer-title').textContent='📄 '+e.name;
+  document.getElementById('viewer-title').style.display='block';
+  const pathStr=_vaultPathHandles.map(ph=>ph.name).join('/')+'/'+e.name;
+  document.getElementById('viewer-meta').textContent=pathStr;
+  const bodyEl=document.getElementById('viewer-body');
+  bodyEl.style.display='block';
+  if(/\.(md|markdown)$/i.test(e.name)){
+    bodyEl.innerHTML=marked.parse(content);
+  } else {
+    bodyEl.innerHTML='<pre style="white-space:pre-wrap;font-family:\'Space Mono\',monospace;font-size:12px;overflow-x:auto">'+esc(content)+'</pre>';
+  }
   switchTab('intel',document.querySelector('[data-page=intel]'));
 }
+
+async function loadFiles(){ /* vault is managed by openVault() */ }
 
 // ── Modals
 function openM(id){document.getElementById(id).classList.add('open');}
