@@ -9,9 +9,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="CLUBHOUSE">
 <title>CLUBHOUSE</title>
+<link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/keymap/vim.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
 <style>
 /* ═══════════════════════════════════════════════ VARIABLES */
 :root {
@@ -423,8 +429,80 @@ input, select, textarea { font-family: inherit; }
 .viewer-panel { display: flex; flex-direction: column; overflow: hidden; }
 .viewer-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
 .viewer-title  { font-size: 15px; font-weight: 600; color: var(--text); }
-.viewer-body   { flex: 1; padding: 18px; overflow-y: auto; font-size: 13px; line-height: 1.85; color: var(--text); white-space: pre-wrap; }
+.viewer-body   { flex: 1; padding: 18px; overflow-y: auto; font-size: 13px; line-height: 1.85; color: var(--text); }
 .files-pane { flex-shrink: 0; }
+
+/* ─── Write / Preview editor tabs */
+.editor-tab-bar {
+  display: flex; align-items: flex-end; gap: 0;
+  padding: 8px 18px 0; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; background: var(--panel);
+}
+.editor-tab {
+  font-size: 11px; font-weight: 600; letter-spacing: 1px;
+  padding: 6px 16px; border: 1px solid transparent; border-bottom: none;
+  border-radius: 4px 4px 0 0; background: none; color: var(--text-dim);
+  cursor: pointer; transition: all 0.15s; position: relative; bottom: -1px;
+}
+.editor-tab:hover { color: var(--text); }
+.editor-tab.active {
+  background: var(--panel); color: var(--text);
+  border-color: var(--border); border-bottom-color: var(--panel);
+}
+.editor-vim-btn {
+  margin-left: auto; align-self: center; margin-bottom: 6px;
+  font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700;
+  padding: 3px 10px; border-radius: 4px;
+  border: 1px solid var(--border2); background: none; color: var(--text-dim);
+  cursor: pointer; letter-spacing: 1.5px; transition: all 0.15s;
+}
+.editor-vim-btn.on { background: var(--gold-bg); color: var(--gold); border-color: var(--gold-dim); }
+
+/* ─── CodeMirror dark theme overrides */
+.CodeMirror {
+  height: 100% !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  font-family: 'Space Mono', monospace !important;
+  font-size: 13px !important;
+  line-height: 1.85 !important;
+  border: none !important;
+}
+.CodeMirror-scroll { background: var(--panel) !important; }
+.CodeMirror-gutters { background: var(--panel2) !important; border-right: 1px solid var(--border) !important; }
+.CodeMirror-linenumber { color: var(--text-dim) !important; }
+.CodeMirror-cursor { border-left: 2px solid var(--gold) !important; }
+.CodeMirror-selected { background: var(--gold-bg2) !important; }
+.CodeMirror-focused .CodeMirror-selected { background: var(--gold-bg2) !important; }
+.CodeMirror-line { color: var(--text) !important; }
+.cm-header { color: var(--gold) !important; font-weight: 700; }
+.cm-strong { color: var(--text) !important; font-weight: 700; }
+.cm-em { color: var(--text-mid) !important; }
+.cm-link, .cm-url { color: var(--blue) !important; }
+.cm-code { color: var(--teal) !important; font-family: 'Space Mono', monospace !important; }
+
+/* ─── Markdown preview */
+.md-preview h1 { font-size: 20px; font-weight: 700; color: var(--text); margin: 0 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.md-preview h2 { font-size: 16px; font-weight: 600; color: var(--text); margin: 20px 0 8px; }
+.md-preview h3 { font-size: 14px; font-weight: 600; color: var(--text-mid); margin: 16px 0 6px; }
+.md-preview h4, .md-preview h5, .md-preview h6 { font-size: 13px; font-weight: 600; color: var(--text-dim); margin: 12px 0 6px; }
+.md-preview p { margin: 0 0 12px; }
+.md-preview ul, .md-preview ol { margin: 0 0 12px; padding-left: 24px; }
+.md-preview li { margin-bottom: 4px; }
+.md-preview code { font-family: 'Space Mono', monospace; font-size: 11px; background: var(--bg2); padding: 1px 5px; border-radius: 3px; color: var(--teal); }
+.md-preview pre { background: var(--bg2); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 12px 16px; overflow-x: auto; margin: 0 0 12px; }
+.md-preview pre code { background: none; padding: 0; color: var(--text-mid); font-size: 12px; }
+.md-preview blockquote { border-left: 3px solid var(--gold-dim); padding-left: 14px; color: var(--text-mid); margin: 0 0 12px 0; }
+.md-preview a { color: var(--blue); text-decoration: none; }
+.md-preview a:hover { text-decoration: underline; }
+.md-preview strong { font-weight: 700; color: var(--text); }
+.md-preview em { color: var(--text-mid); }
+.md-preview hr { border: none; border-top: 1px solid var(--border2); margin: 16px 0; }
+.md-preview table { border-collapse: collapse; width: 100%; margin-bottom: 12px; font-size: 12px; }
+.md-preview th, .md-preview td { border: 1px solid var(--border2); padding: 6px 10px; text-align: left; }
+.md-preview th { background: var(--bg2); font-weight: 600; color: var(--text); }
+.md-preview img { max-width: 100%; border-radius: var(--radius-sm); }
+.md-preview .task-list-item { list-style: none; margin-left: -20px; }
 .f-entry {
   display: flex; align-items: center; gap: 8px; padding: 8px 16px;
   font-size: 12px; color: var(--text-mid); cursor: pointer; transition: color 0.12s, background 0.12s;
@@ -570,6 +648,8 @@ input, select, textarea { font-family: inherit; }
   }
   .intel-left   { max-height: 260px; overflow-y: auto; }
   .viewer-panel { min-height: 360px; }
+  .editor-tab-bar { padding: 6px 12px 0; }
+  .editor-tab { padding: 5px 12px; font-size: 10px; }
 
   /* ── FIX 2: Tasks table — hide overflow columns ─── */
   #page-tasks > div { padding: 14px 12px; }
@@ -759,12 +839,23 @@ input, select, textarea { font-family: inherit; }
             style="display:none;font-size:10px;padding:4px 10px">CANCEL</button>
         </div>
       </div>
-      <div id="viewer-body-wrap" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
-        <div class="viewer-body" id="viewer-body">
+      <div id="viewer-body-wrap" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0">
+        <!-- read view: rendered markdown -->
+        <div class="viewer-body md-preview" id="viewer-body">
           <span style="color:var(--text-dim)">Select a note, or create a new one.</span>
         </div>
-        <textarea class="finput" id="viewer-body-edit" placeholder="Note content..."
-          style="display:none;flex:1;resize:none;border-radius:0;border:none;border-top:1px solid var(--border);padding:18px;font-size:13px;line-height:1.85;background:var(--panel);height:100%"></textarea>
+        <!-- edit view (shown when editing) -->
+        <div id="editor-wrap" style="display:none;flex:1;min-height:0;flex-direction:column">
+          <div class="editor-tab-bar">
+            <button class="editor-tab active" id="tab-write" onclick="setEditorTab('write')">Write</button>
+            <button class="editor-tab" id="tab-preview" onclick="setEditorTab('preview')">Preview</button>
+            <button class="editor-vim-btn" id="vim-toggle-btn" onclick="toggleVim()">VIM</button>
+          </div>
+          <div id="editor-write-pane" style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+            <div id="cm-container" style="flex:1;min-height:0;overflow:hidden"></div>
+          </div>
+          <div class="viewer-body md-preview" id="editor-preview-pane" style="display:none;flex:1;overflow-y:auto"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -861,6 +952,41 @@ input, select, textarea { font-family: inherit; }
 <script>
 let todos=[], deadlines=[], notes=[], calData={}, fileRoots=[];
 let activeNoteId=null, activeFilter='all';
+let cmEditor=null, vimMode=false;
+
+// ── Calendar seed (synced 2026-04-15, update version to re-seed)
+const CAL_SEED_VERSION = '20260415';
+const CAL_SEED_EVENTS = [
+  {title:'SENG2021 Other',start:'2026-04-15T15:00:00+10:00',end:'2026-04-15T17:00:00+10:00',location:'Rupert Myers 560',calendar:'UNSW Timetable'},
+  {title:'SENG2021 Other',start:'2026-04-22T15:00:00+10:00',end:'2026-04-22T17:00:00+10:00',location:'Rupert Myers 560',calendar:'UNSW Timetable'},
+  {title:'ANZAC Day',start:'2026-04-25',end:'2026-04-26',calendar:'Holidays',allDay:true},
+  {title:'COMP3231 Lecture',start:'2026-06-01T16:00:00+10:00',end:'2026-06-01T18:00:00+10:00',location:'Mathews Theatre A',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Tutorial',start:'2026-06-02T14:00:00+10:00',end:'2026-06-02T15:00:00+10:00',location:'Rupert Myers 540',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Lecture',start:'2026-06-03T11:00:00+10:00',end:'2026-06-03T13:00:00+10:00',location:'Keith Burrows Theatre',calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-04T16:00:00+10:00',end:'2026-06-04T18:00:00+10:00',location:"E19 Patricia O'Shane 103",calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-05T15:00:00+10:00',end:'2026-06-05T17:00:00+10:00',location:"E19 Patricia O'Shane 105",calendar:'UNSW Timetable'},
+  {title:'COMP3231 Tutorial',start:'2026-06-09T14:00:00+10:00',end:'2026-06-09T15:00:00+10:00',location:'Rupert Myers 540',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Lecture',start:'2026-06-10T11:00:00+10:00',end:'2026-06-10T13:00:00+10:00',location:'Keith Burrows Theatre',calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-11T16:00:00+10:00',end:'2026-06-11T18:00:00+10:00',location:"E19 Patricia O'Shane 103",calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-12T15:00:00+10:00',end:'2026-06-12T17:00:00+10:00',location:"E19 Patricia O'Shane 105",calendar:'UNSW Timetable'},
+  {title:'COMP3231 Lecture',start:'2026-06-15T16:00:00+10:00',end:'2026-06-15T18:00:00+10:00',location:'Mathews Theatre A',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Tutorial',start:'2026-06-16T14:00:00+10:00',end:'2026-06-16T15:00:00+10:00',location:'Rupert Myers 540',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Lecture',start:'2026-06-17T11:00:00+10:00',end:'2026-06-17T13:00:00+10:00',location:'Keith Burrows Theatre',calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-18T16:00:00+10:00',end:'2026-06-18T18:00:00+10:00',location:"E19 Patricia O'Shane 103",calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-19T15:00:00+10:00',end:'2026-06-19T17:00:00+10:00',location:"E19 Patricia O'Shane 105",calendar:'UNSW Timetable'},
+  {title:'COMP3231 Lecture',start:'2026-06-22T16:00:00+10:00',end:'2026-06-22T18:00:00+10:00',location:'Mathews Theatre A',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Tutorial',start:'2026-06-23T14:00:00+10:00',end:'2026-06-23T15:00:00+10:00',location:'Rupert Myers 540',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Lecture',start:'2026-06-24T11:00:00+10:00',end:'2026-06-24T13:00:00+10:00',location:'Keith Burrows Theatre',calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-25T16:00:00+10:00',end:'2026-06-25T18:00:00+10:00',location:"E19 Patricia O'Shane 103",calendar:'UNSW Timetable'},
+  {title:'COMP3142 Lecture',start:'2026-06-26T15:00:00+10:00',end:'2026-06-26T17:00:00+10:00',location:"E19 Patricia O'Shane 105",calendar:'UNSW Timetable'},
+  {title:'COMP3231 Lecture',start:'2026-06-29T16:00:00+10:00',end:'2026-06-29T18:00:00+10:00',location:'Mathews Theatre A',calendar:'UNSW Timetable'},
+  {title:'COMP3231 Tutorial',start:'2026-06-30T14:00:00+10:00',end:'2026-06-30T15:00:00+10:00',location:'Rupert Myers 540',calendar:'UNSW Timetable'},
+];
+function seedCalendar(){
+  if(lsGet('calSeedVer','')===CAL_SEED_VERSION) return;
+  lsSet('calendar',{lastSync:new Date().toISOString(),events:CAL_SEED_EVENTS});
+  lsSet('calSeedVer',CAL_SEED_VERSION);
+}
 
 // ── Clock
 function tick(){
@@ -881,18 +1007,29 @@ function switchTab(name,btn){
   if(btn) btn.classList.add('active');
 }
 
-// ── Local storage helpers
+// ── Backend detection (runs once at startup)
+let USE_SERVER = false;
+async function detectBackend(){
+  try{ const r=await fetch('/api/todos',{method:'GET'}); USE_SERVER=r.ok; }catch{ USE_SERVER=false; }
+}
+
+// ── Local storage helpers (used when no server is available)
 function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function lsGet(key,def){ try{ return JSON.parse(localStorage.getItem('cb_'+key))??def; }catch{ return def; } }
 function lsSet(key,val){ localStorage.setItem('cb_'+key,JSON.stringify(val)); }
 
-// ── API (localStorage shim — no server needed)
+// ── API (auto-detects server; falls back to localStorage)
 async function api(method,url,body){
+  if(USE_SERVER){
+    const o={method,headers:{'Content-Type':'application/json'}};
+    if(body!==undefined) o.body=JSON.stringify(body);
+    return (await fetch(url,o)).json();
+  }
+  // localStorage shim
   const path=url.split('?')[0];
   const parts=path.replace(/^\/api\//,'').split('/');
   const resource=parts[0];
   const id=parts[1];
-
   if(resource==='calendar'){
     if(method==='GET') return lsGet('calendar',{lastSync:null,events:[]});
     if(method==='PUT'){ lsSet('calendar',body); return {ok:true}; }
@@ -923,7 +1060,10 @@ async function api(method,url,body){
     if(method==='POST'){ const item={id:genId(),createdAt:new Date().toISOString(),...body}; items.push(item); lsSet('links',items); return item; }
     if(method==='DELETE'){ lsSet('links',items.filter(x=>x.id!==id)); return {ok:true}; }
   }
-  if(resource==='files') return {roots:[]};
+  if(resource==='files'){
+    const roots=lsGet('fileRoots',[{name:'claude-vault',path:'/home/fool/projects/claude-vault'}]);
+    return {roots};
+  }
   return {};
 }
 
@@ -946,7 +1086,7 @@ function renderSched(){
   cnt.textContent=upcoming.length;
   if(!upcoming.length){body.innerHTML='<div class="empty-msg">No upcoming events</div>';return;}
 
-  const cols={'UNSW Timetable':'var(--gold)','Holidays':'var(--green)','Personal':'var(--blue)'};
+  const cols={'UNSW Timetable':'var(--gold)','Holidays':'var(--green)','Personal':'var(--blue)','SENG2021':'var(--gold)','COMP3231':'var(--teal)','COMP3142':'var(--purple)'};
   const todayStr=now.toDateString();
   const grouped={};
   upcoming.forEach(e=>{
@@ -1167,7 +1307,7 @@ function selectNote(id){
   cancelEditMode();
   document.getElementById('viewer-title').textContent=n.title;
   document.getElementById('viewer-meta').textContent=fmtDate(n.createdAt);
-  document.getElementById('viewer-body').textContent=n.content;
+  document.getElementById('viewer-body').innerHTML=marked.parse(n.content||'');
   document.getElementById('viewer-del').style.display='block';
   document.getElementById('viewer-edit-btn').style.display='block';
   renderNotesList();
@@ -1181,11 +1321,24 @@ function enterEditMode(){
   const titleIn=document.getElementById('viewer-title-edit');
   titleIn.value=n.title;
   titleIn.style.display='block';
-  // swap body
+  // swap body: hide read view, show editor
   document.getElementById('viewer-body').style.display='none';
-  const bodyIn=document.getElementById('viewer-body-edit');
-  bodyIn.value=n.content;
-  bodyIn.style.display='block';
+  const edWrap=document.getElementById('editor-wrap');
+  edWrap.style.display='flex';
+  // init CodeMirror
+  const container=document.getElementById('cm-container');
+  container.innerHTML='';
+  cmEditor=CodeMirror(container,{
+    value:n.content||'',
+    mode:'markdown',
+    lineNumbers:true,
+    lineWrapping:true,
+    keyMap:vimMode?'vim':'default',
+    autofocus:false,
+  });
+  cmEditor.setSize('100%','100%');
+  setTimeout(()=>cmEditor.refresh(),80);
+  setEditorTab('write');
   // swap buttons
   document.getElementById('viewer-edit-btn').style.display='none';
   document.getElementById('viewer-del').style.display='none';
@@ -1198,23 +1351,47 @@ function cancelEditMode(){
   document.getElementById('viewer-title').style.display='block';
   document.getElementById('viewer-title-edit').style.display='none';
   document.getElementById('viewer-body').style.display='block';
-  document.getElementById('viewer-body-edit').style.display='none';
+  document.getElementById('editor-wrap').style.display='none';
   document.getElementById('viewer-save-btn').style.display='none';
   document.getElementById('viewer-cancel-btn').style.display='none';
+  cmEditor=null;
   if(activeNoteId){
     document.getElementById('viewer-edit-btn').style.display='block';
     document.getElementById('viewer-del').style.display='block';
   }
 }
 
+function setEditorTab(tab){
+  document.getElementById('tab-write').classList.toggle('active',tab==='write');
+  document.getElementById('tab-preview').classList.toggle('active',tab==='preview');
+  const writePan=document.getElementById('editor-write-pane');
+  const previewPan=document.getElementById('editor-preview-pane');
+  if(tab==='write'){
+    writePan.style.display='flex';
+    previewPan.style.display='none';
+    if(cmEditor) setTimeout(()=>cmEditor.refresh(),50);
+  } else {
+    writePan.style.display='none';
+    previewPan.style.display='block';
+    previewPan.innerHTML=marked.parse(cmEditor?cmEditor.getValue():'');
+  }
+}
+
+function toggleVim(){
+  vimMode=!vimMode;
+  const btn=document.getElementById('vim-toggle-btn');
+  btn.classList.toggle('on',vimMode);
+  btn.textContent=vimMode?'VIM ON':'VIM';
+  if(cmEditor) cmEditor.setOption('keyMap',vimMode?'vim':'default');
+}
+
 async function saveNoteEdit(){
   if(!activeNoteId)return;
   const title=document.getElementById('viewer-title-edit').value.trim();
-  const content=document.getElementById('viewer-body-edit').value.trim();
+  const content=(cmEditor?cmEditor.getValue():'').trim();
   if(!title||!content)return;
   await api('PUT',`/api/notes/${activeNoteId}`,{title,content});
   await loadNotes();
-  // re-select to refresh viewer
   selectNote(activeNoteId);
 }
 
@@ -1270,10 +1447,18 @@ async function browseDir(p){
 
 async function viewFile(p){
   const data=await api('GET',`/api/files/read?path=${encodeURIComponent(p)}`);
-  document.getElementById('viewer-title').textContent='📄 '+p.split('/').pop();
+  const fname=p.split('/').pop();
+  const bodyEl=document.getElementById('viewer-body');
+  cancelEditMode();
+  document.getElementById('viewer-title').textContent='📄 '+fname;
   document.getElementById('viewer-meta').textContent=p;
-  document.getElementById('viewer-body').textContent=data.content;
+  if(/\.(md|markdown)$/i.test(fname)){
+    bodyEl.innerHTML=marked.parse(data.content||'');
+  } else {
+    bodyEl.innerHTML='<pre style="white-space:pre-wrap;font-family:\'Space Mono\',monospace;font-size:12px">'+esc(data.content||'')+'</pre>';
+  }
   document.getElementById('viewer-del').style.display='none';
+  document.getElementById('viewer-edit-btn').style.display='none';
   activeNoteId=null;
   switchTab('intel',document.querySelector('[data-page=intel]'));
 }
@@ -1385,12 +1570,20 @@ async function delLink(id){
 }
 
 async function refreshAll(){
-  await Promise.all([loadCal(),loadTodos(),loadDL(),loadNotes(),loadLinks(),loadWeather()]);
+  await Promise.all([loadCal(),loadTodos(),loadDL(),loadNotes(),loadLinks(),loadWeather(),loadFiles()]);
 }
 
 setInterval(refreshAll,30000);
-refreshAll();
+(async()=>{ await detectBackend(); seedCalendar(); refreshAll(); })();
 
+/* ── PWA: register service worker ───────────────────────────────────────── */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err => {
+      console.warn('SW registration failed:', err);
+    });
+  });
+}
 
 /* ── Keyboard shortcuts ─────────────────────────────────────
    1 → OPS tab   2 → TASKS tab   3 → NOTES tab
